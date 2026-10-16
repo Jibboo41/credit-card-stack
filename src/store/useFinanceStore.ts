@@ -54,6 +54,12 @@ interface FinanceState {
   deleteCreditCard: (id: string) => Promise<void>;
   updateTransaction: (id: string, updates: Partial<Transaction>) => Promise<void>;
 
+  isSidebarOpen: boolean;
+  activeTab: 'categories' | 'cashback' | 'offers' | 'no-ftf' | 'manage';
+  setActiveTab: (tab: 'categories' | 'cashback' | 'offers' | 'no-ftf' | 'manage') => void;
+  setSidebarOpen: (isOpen: boolean) => void;
+  fetchCreditCards: () => () => void;
+
   pushToast: (toast: Omit<Toast, 'id'>, durationMs?: number) => void;
   dismissToast: (id: string) => void;
 }
@@ -136,6 +142,12 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
   showHiddenItems: false,
   isSyncing: false,
   toasts: [],
+
+  isSidebarOpen: false,
+  activeTab: 'categories',
+  setActiveTab: (tab) => set({ activeTab: tab }),
+  setSidebarOpen: (isOpen) => set({ isSidebarOpen: isOpen }),
+  fetchCreditCards: () => get().subscribeToData(),
 
   setViewingMonth: (month) => set({ viewingMonth: month }),
   setShowHiddenItems: (show) => set({ showHiddenItems: show }),
