@@ -7,9 +7,12 @@ export default function LoginScreen() {
     try {
       const provider = new GoogleAuthProvider();
       await signInWithPopup(auth, provider);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error signing in with Google", error);
-      alert("Failed to sign in. Please make sure Google Sign-In is enabled in the Firebase Console.");
+      if (error?.code === 'auth/popup-closed-by-user') {
+        return;
+      }
+      alert(error?.message || "Failed to sign in. Please make sure Google Sign-In is enabled in the Firebase Console.");
     }
   };
 
