@@ -1,0 +1,47 @@
+{
+  "functions": {
+    "source": "functions",
+    "runtime": "python312",
+    "ignore": [
+      "venv",
+      ".venv",
+      "__pycache__",
+      "*.pyc"
+    ]
+  },
+  "hosting": [
+    {
+      "target": "creditcardstack",
+      "public": "dist",
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**"
+      ],
+      "rewrites": [
+        {
+          "source": "**",
+          "destination": "/index.html"
+        }
+      ]
+    },
+    {
+      "target": "lifestack",
+      "public": "dist",
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**"
+      ],
+      "rewrites": [
+        {
+          "source": "**",
+          "destination": "/index.html"
+        }
+      ]
+    }
+  ],
+  "storage": {
+    "rules": "storage.rules"
+  }
+}

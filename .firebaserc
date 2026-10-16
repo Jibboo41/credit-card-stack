@@ -1,0 +1,18 @@
+{
+  "projects": {
+    "lifestack": "lifestack-73c75"
+  },
+  "targets": {
+    "lifestack-73c75": {
+      "hosting": {
+        "creditcardstack": [
+          "creditcardstack"
+        ],
+        "lifestack": [
+          "lifestack-73c75"
+        ]
+      }
+    }
+  },
+  "etags": {}
+}
