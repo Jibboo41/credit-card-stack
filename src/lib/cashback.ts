@@ -98,6 +98,7 @@ export interface CategoryEarnings {
   cashback: number;
   rate: number;
   isBase: boolean;
+  transactions: Transaction[];
 }
 
 export interface CardEarnings {
@@ -109,7 +110,7 @@ export interface CardEarnings {
 
 export interface MonthEarnings {
   byCard: CardEarnings[];
-  byCategory: Record<FinanceCategory, { card: CreditCard; spend: number; cashback: number; rate: number }[]>;
+  byCategory: Record<FinanceCategory, { card: CreditCard; spend: number; cashback: number; rate: number; transactions: Transaction[] }[]>;
   totalSpend: number;
   totalCashback: number;
 }
@@ -129,15 +130,18 @@ export function cardsByMonarchId(cards: CreditCard[]): Map<string, CreditCard> {
 /** Net spend per card and category for the month (refunds offset purchases; transfers excluded). */
 export function computeMonthEarnings(cards: CreditCard[], transactions: Transaction[], ym: string): MonthEarnings {
   const byMonarchId = cardsByMonarchId(cards);
-  const spend = new Map<string, Map<FinanceCategory, number>>();
+  const spend = new Map<string, Map<FinanceCategory, { spend: number; transactions: Transaction[] }>>();
 
   for (const tx of transactions) {
     if (!tx.date.startsWith(ym) || !earnsRewards(tx)) continue;
     const card = byMonarchId.get(tx.monarchAccountId);
     if (!card) continue;
     const category = CATEGORIES.includes(tx.category) ? tx.category : 'Other';
-    const perCat = spend.get(card.id) ?? new Map<FinanceCategory, number>();
-    perCat.set(category, (perCat.get(category) ?? 0) - tx.amount);
+    const perCat = spend.get(card.id) ?? new Map<FinanceCategory, { spend: number; transactions: Transaction[] }>();
+    const group = perCat.get(category) ?? { spend: 0, transactions: [] };
+    group.spend -= tx.amount;
+    group.transactions.push(tx);
+    perCat.set(category, group);
     spend.set(card.id, perCat);
   }
 
@@ -151,12 +155,14 @@ export function computeMonthEarnings(cards: CreditCard[], transactions: Transact
     if (!perCat) continue;
     const categories: CategoryEarnings[] = [];
     for (const category of CATEGORIES) {
-      const s = perCat.get(category) ?? 0;
-      if (s <= 0) continue;
+      const group = perCat.get(category);
+      if (!group || group.spend <= 0) continue;
+      const s = group.spend;
+      const categoryTransactions = group.transactions.sort((a, b) => b.date.localeCompare(a.date));
       const rate = getCardCashback(card, ym, category);
       const cashback = s * (rate / 100);
-      categories.push({ category, spend: s, cashback, rate, isBase: isBaseCashback(card, ym, category) });
-      byCategory[category].push({ card, spend: s, cashback, rate });
+      categories.push({ category, spend: s, cashback, rate, isBase: isBaseCashback(card, ym, category), transactions: categoryTransactions });
+      byCategory[category].push({ card, spend: s, cashback, rate, transactions: categoryTransactions });
     }
     if (categories.length === 0) continue;
     categories.sort((a, b) => b.cashback - a.cashback);

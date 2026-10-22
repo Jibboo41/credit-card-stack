@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { CreditCard as CardIcon, Edit2, Globe, Percent, Plus, Search, ShieldCheck } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { CreditCard as CardIcon, Edit2, Globe, Percent, Plus, Receipt, Search, ShieldCheck } from 'lucide-react';
 import { useFinanceStore } from '../store/useFinanceStore';
 import { useUiStore } from '../store/useUiStore';
 import { useVisibleData } from '../hooks/useVisibleData';
@@ -224,6 +225,13 @@ export function CardsPage() {
 
                 {/* Footer Buttons */}
                 <div className="cc-footer">
+                  <Link
+                    to={`/transactions?card=${encodeURIComponent(card.id)}`}
+                    className="btn btn-sm"
+                    aria-label={`View transactions for ${card.name}`}
+                  >
+                    <Receipt size={14} /> View Transactions
+                  </Link>
                   <button
                     type="button"
                     className="btn btn-sm btn-ghost"

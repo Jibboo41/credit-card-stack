@@ -390,6 +390,24 @@ button.list-row:hover, a.list-row:hover { background: var(--surface); }
 .callout.info > svg { color: var(--accent); }
 .callout-actions { margin-left: auto; display: flex; gap: 8px; align-self: center; flex-shrink: 0; }
 
+.missed-reward { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; gap: 4px 8px; align-items: center; font-size: 13px; background: rgba(0, 0, 0, 0.2); padding: 10px; border-radius: 8px; }
+.missed-reward-category { display: flex; flex-direction: column; min-width: 0; overflow-wrap: anywhere; }
+.missed-reward-amount { color: var(--orange); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.missed-reward-best { grid-column: 2 / -1; overflow-wrap: anywhere; }
+
+.reward-breakdown { border-bottom: 1px solid var(--border); min-width: 0; }
+.reward-breakdown:last-child { border-bottom: none; }
+.reward-breakdown-toggle { display: grid; grid-template-columns: minmax(0, 1fr) auto 16px; gap: 8px; padding: 8px 4px; font-size: 13px; }
+.reward-breakdown-label { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; min-width: 0; font-weight: 600; overflow-wrap: anywhere; }
+.reward-breakdown-label .rate-pill { height: 20px; min-width: 0; font-size: 11px; }
+.reward-transactions { padding: 8px; margin-bottom: 8px; background: rgba(0, 0, 0, 0.15); border-radius: var(--radius-sm); }
+.reward-merchant { font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+.transaction-filters { display: flex; flex: 1 1 560px; flex-wrap: wrap; gap: 8px; min-width: 0; }
+.transaction-filters .select { width: auto; max-width: 100%; flex: 1 1 150px; }
+@media (max-width: 480px) {
+  .reward-card-header { flex-wrap: wrap; }
+}
+
 .empty-state { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 10px; padding: 44px 20px; color: var(--text-2); }
 .empty-state-icon { width: 52px; height: 52px; border-radius: 16px; display: grid; place-items: center; background: var(--surface-2); color: var(--text-2); margin-bottom: 4px; }
 .empty-state h3 { color: var(--text); font-size: 16px; }

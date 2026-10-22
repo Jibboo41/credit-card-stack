@@ -1,10 +1,13 @@
-import { useState } from 'react';
-import { AlertCircle, PiggyBank, Sparkles } from 'lucide-react';
+import { useId, useState } from 'react';
+import type { ReactNode } from 'react';
+import { AlertCircle, ChevronDown, PiggyBank, Sparkles } from 'lucide-react';
 import { CATEGORIES } from '../core/models';
+import type { Transaction } from '../core/models';
 import { useFinanceStore } from '../store/useFinanceStore';
+import { useUiStore } from '../store/useUiStore';
 import { useVisibleData } from '../hooks/useVisibleData';
 import { computeMonthEarnings, computeMissedRewards } from '../lib/cashback';
-import { formatCurrency, formatMonth, formatRate } from '../lib/format';
+import { formatCurrency, formatDate, formatMonth, formatRate, formatTxAmount } from '../lib/format';
 import { Segmented } from '../components/ui/Segmented';
 import { CardThumb } from '../components/ui/CardThumb';
 import { CategoryBadge } from '../components/ui/CategoryIcon';
@@ -73,15 +76,15 @@ export function RewardsPage() {
             </div>
             <div className="stack" style={{ marginTop: '10px' }}>
               {missedRewards.map(m => (
-                <div key={m.category} className="row-between" style={{ fontSize: '13px', background: 'rgba(0,0,0,0.2)', padding: '6px 10px', borderRadius: '8px' }}>
-                  <div className="row" style={{ gap: '8px' }}>
-                    <CategoryBadge category={m.category} size={24} />
-                    <span style={{ fontWeight: 600 }}>{m.category}</span>
-                    <span className="subtle">({formatCurrency(m.spend)} spent)</span>
+                <div key={m.category} className="missed-reward">
+                  <CategoryBadge category={m.category} size={24} />
+                  <div className="missed-reward-category">
+                    <strong>{m.category}</strong>
+                    <span className="muted">{formatCurrency(m.spend)} spent</span>
                   </div>
-                  <div className="row" style={{ gap: '10px' }}>
-                    <span className="subtle">Best: {m.bestCards.map(c => c.name).join(', ')} ({formatRate(m.bestRate)})</span>
-                    <strong style={{ color: 'var(--orange)' }}>+{formatCurrency(m.missed)}</strong>
+                  <strong className="missed-reward-amount">+{formatCurrency(m.missed)}</strong>
+                  <div className="missed-reward-best muted">
+                    Best: {m.bestCards.map(c => c.name).join(', ')} ({formatRate(m.bestRate)})
                   </div>
                 </div>
               ))}
@@ -115,17 +118,17 @@ export function RewardsPage() {
             <div className="grid grid-2">
               {earnings.byCard.map(cardEarn => (
                 <div key={cardEarn.card.id} className="panel">
-                  <div className="row-between" style={{ marginBottom: '14px' }}>
-                    <div className="row" style={{ gap: '10px' }}>
+                  <div className="row-between reward-card-header" style={{ marginBottom: '14px' }}>
+                    <div className="row grow" style={{ gap: '10px' }}>
                       <CardThumb card={cardEarn.card} size="md" />
-                      <div>
-                        <div style={{ fontWeight: 700, fontSize: '15px' }}>{cardEarn.card.name}</div>
+                      <div className="grow">
+                        <div style={{ fontWeight: 700, fontSize: '15px', overflowWrap: 'anywhere' }}>{cardEarn.card.name}</div>
                         <div style={{ fontSize: '12px', color: 'var(--text-3)' }}>
                           {formatCurrency(cardEarn.spend)} spent • {formatRate(cardEarn.spend > 0 ? (cardEarn.cashback / cardEarn.spend) * 100 : 0)} return
                         </div>
                       </div>
                     </div>
-                    <div style={{ textAlign: 'right' }}>
+                    <div style={{ textAlign: 'right', flexShrink: 0 }}>
                       <div className="text-good" style={{ fontWeight: 750, fontSize: '18px' }}>
                         {formatCurrency(cardEarn.cashback)}
                       </div>
@@ -135,20 +138,15 @@ export function RewardsPage() {
 
                   <div className="list">
                     {cardEarn.categories.map(catEarn => (
-                      <div key={catEarn.category} className="list-row" style={{ padding: '6px 4px' }}>
-                        <div className="row" style={{ gap: '8px' }}>
-                          <CategoryBadge category={catEarn.category} size={26} />
-                          <span style={{ fontSize: '13px', fontWeight: 600 }}>{catEarn.category}</span>
-                          <span className="rate-pill sm" style={{ height: '20px', fontSize: '11px' }}>
-                            {formatRate(catEarn.rate)}
-                          </span>
-                        </div>
-                        <span className="spacer" style={{ flex: 1 }} />
-                        <div style={{ textAlign: 'right', fontSize: '13px' }}>
-                          <span className="tabular">{formatCurrency(catEarn.cashback)}</span>
-                          <span className="subtle" style={{ marginLeft: '6px' }}>({formatCurrency(catEarn.spend)})</span>
-                        </div>
-                      </div>
+                      <RewardBreakdown
+                        key={`${viewingMonth}-${catEarn.category}`}
+                        label={catEarn.category}
+                        icon={<CategoryBadge category={catEarn.category} size={26} />}
+                        rate={catEarn.rate}
+                        spend={catEarn.spend}
+                        cashback={catEarn.cashback}
+                        transactions={catEarn.transactions}
+                      />
                     ))}
                   </div>
                 </div>
@@ -189,20 +187,15 @@ export function RewardsPage() {
 
                 <div className="list">
                   {entries.map(entry => (
-                    <div key={entry.card.id} className="list-row" style={{ padding: '6px 4px' }}>
-                      <div className="row" style={{ gap: '8px' }}>
-                        <CardThumb card={entry.card} size="xs" />
-                        <span style={{ fontSize: '13px' }}>{entry.card.name}</span>
-                        <span className="rate-pill sm" style={{ height: '20px', fontSize: '11px' }}>
-                          {formatRate(entry.rate)}
-                        </span>
-                      </div>
-                      <span className="spacer" style={{ flex: 1 }} />
-                      <div style={{ textAlign: 'right', fontSize: '13px' }}>
-                        <span className="tabular text-good">{formatCurrency(entry.cashback)}</span>
-                        <span className="subtle" style={{ marginLeft: '6px' }}>({formatCurrency(entry.spend)})</span>
-                      </div>
-                    </div>
+                    <RewardBreakdown
+                      key={`${viewingMonth}-${entry.card.id}`}
+                      label={entry.card.name}
+                      icon={<CardThumb card={entry.card} size="xs" />}
+                      rate={entry.rate}
+                      spend={entry.spend}
+                      cashback={entry.cashback}
+                      transactions={entry.transactions}
+                    />
                   ))}
                 </div>
               </div>
@@ -210,6 +203,68 @@ export function RewardsPage() {
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+function RewardBreakdown({ label, icon, rate, spend, cashback, transactions }: {
+  label: string;
+  icon: ReactNode;
+  rate: number;
+  spend: number;
+  cashback: number;
+  transactions: Transaction[];
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const id = useId();
+  const openDialog = useUiStore(s => s.openDialog);
+
+  return (
+    <div className="reward-breakdown">
+      <button
+        type="button"
+        className="list-row disclosure reward-breakdown-toggle"
+        aria-expanded={expanded}
+        aria-controls={id}
+        onClick={() => setExpanded(!expanded)}
+      >
+        <span className="row" style={{ gap: '8px' }}>
+          {icon}
+          <span className="reward-breakdown-label">
+            <span>{label}</span>
+            <span className="rate-pill">{formatRate(rate)}</span>
+          </span>
+        </span>
+        <span className="list-row-end">
+          <span className="tabular text-good">{formatCurrency(cashback)}</span>
+          <span className="muted" style={{ fontSize: '11px' }}>{formatCurrency(spend)} spent</span>
+        </span>
+        <ChevronDown size={16} className="disclosure-chevron" />
+      </button>
+      <div id={id} hidden={!expanded} className="reward-transactions">
+        <div className="muted" style={{ fontSize: '12px', padding: '4px' }}>
+          {transactions.length} {transactions.length === 1 ? 'transaction' : 'transactions'}
+        </div>
+        {expanded && transactions.map(tx => (
+          <button
+            key={tx.id}
+            type="button"
+            className="list-row"
+            onClick={() => openDialog({ type: 'transaction', txId: tx.id })}
+          >
+            <span className="list-row-main">
+              <span className="reward-merchant">{tx.merchantName}</span>
+              <span className="muted" style={{ fontSize: '12px' }}>{formatDate(tx.date)}</span>
+            </span>
+            <span className="list-row-end">
+              <span className={`amount${tx.amount > 0 ? ' credit' : ''}`}>{formatTxAmount(tx.amount)}</span>
+              <span className="muted" style={{ fontSize: '12px' }}>
+                {formatCurrency(-tx.amount * rate / 100)} cash back
+              </span>
+            </span>
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

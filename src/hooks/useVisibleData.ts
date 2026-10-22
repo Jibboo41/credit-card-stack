@@ -1,9 +1,10 @@
 import type { CreditCard, Transaction } from '../core/models';
 import { cardsByMonarchId, getResolvedTransaction } from '../lib/cashback';
+import { sortCardsByBalanceAndRecentUse } from '../lib/cardSorting';
 import { useFinanceStore } from '../store/useFinanceStore';
 
 export interface VisibleData {
-  /** Cards respecting the "show hidden" toggle, sorted by bank then name. */
+  /** Cards respecting the "show hidden" toggle, sorted by balance owed then most recently used. */
   cards: CreditCard[];
   /** Transactions with manual overrides applied, respecting hidden transactions and hidden cards. */
   transactions: Transaction[];
@@ -17,14 +18,12 @@ function selectVisibleData(allCards: CreditCard[], allTransactions: Transaction[
   if (cache && cache.cards === allCards && cache.transactions === allTransactions && cache.showHidden === showHidden) {
     return cache.result;
   }
-  const cards = allCards
-    .filter(c => showHidden || !c.hidden)
-    .sort((a, b) => (a.bankName || a.institutionName || '~').localeCompare(b.bankName || b.institutionName || '~') || a.name.localeCompare(b.name));
   const hiddenAccounts = new Set(allCards.filter(c => c.hidden && c.monarchId).map(c => c.monarchId));
   const transactions = allTransactions
     .map(getResolvedTransaction)
     .filter(tx => showHidden || (!tx.hidden && !hiddenAccounts.has(tx.monarchAccountId)))
     .sort((a, b) => b.date.localeCompare(a.date));
+  const cards = sortCardsByBalanceAndRecentUse(allCards.filter(c => showHidden || !c.hidden), transactions);
   const result = { cards, transactions, cardByMonarchId: cardsByMonarchId(allCards) };
   cache = { cards: allCards, transactions: allTransactions, showHidden, result };
   return result;

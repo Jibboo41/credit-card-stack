@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Ban, Filter, Receipt, Search } from 'lucide-react';
 import { CATEGORIES } from '../core/models';
 import { useFinanceStore } from '../store/useFinanceStore';
@@ -16,7 +17,16 @@ export function TransactionsPage() {
   const { cards, transactions, cardByMonarchId } = useVisibleData();
 
   const [search, setSearch] = useState('');
-  const [filterCardId, setFilterCardId] = useState<string>('all');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const filterCardId = searchParams.get('card') || 'all';
+  const setFilterCardId = (cardId: string) => {
+    setSearchParams(previous => {
+      const next = new URLSearchParams(previous);
+      if (cardId === 'all') next.delete('card');
+      else next.set('card', cardId);
+      return next;
+    });
+  };
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [filterReward, setFilterReward] = useState<'all' | 'earning' | 'excluded'>('all');
   const [allMonths, setAllMonths] = useState(false);
@@ -75,9 +85,10 @@ export function TransactionsPage() {
               />
             </div>
 
-            <div className="row" style={{ gap: '8px' }}>
+            <div className="transaction-filters">
               <select
                 className="select input-sm"
+                aria-label="Filter by card"
                 value={filterCardId}
                 onChange={e => setFilterCardId(e.target.value)}
               >
@@ -91,6 +102,7 @@ export function TransactionsPage() {
 
               <select
                 className="select input-sm"
+                aria-label="Filter by category"
                 value={filterCategory}
                 onChange={e => setFilterCategory(e.target.value)}
               >
@@ -104,6 +116,7 @@ export function TransactionsPage() {
 
               <select
                 className="select input-sm"
+                aria-label="Filter by rewards status"
                 value={filterReward}
                 onChange={e => setFilterReward(e.target.value as any)}
               >
@@ -115,6 +128,7 @@ export function TransactionsPage() {
               <button
                 type="button"
                 className={`btn btn-sm ${allMonths ? 'btn-primary' : ''}`}
+                aria-pressed={allMonths}
                 onClick={() => setAllMonths(!allMonths)}
               >
                 {allMonths ? 'Showing all time' : `This month only`}
