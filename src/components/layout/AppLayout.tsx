@@ -195,7 +195,7 @@ export function AppLayout() {
               end={item.to === '/'}
               className={({ isActive }) => `bottom-nav-item ${isActive ? 'active' : ''}`}
             >
-              <Icon size={20} />
+              <Icon size={24} />
               <span>{item.label}</span>
             </NavLink>
           );
@@ -206,7 +206,7 @@ export function AppLayout() {
           className={`bottom-nav-item ${mobileMenuOpen ? 'active' : ''}`}
           onClick={() => setMobileMenuOpen(true)}
         >
-          <MoreHorizontal size={20} />
+          <MoreHorizontal size={24} />
           <span>More</span>
         </button>
       </nav>

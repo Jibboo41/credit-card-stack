@@ -10,7 +10,7 @@ const server = await createServer({
 });
 after(() => server.close());
 const { sortCardsByBalanceAndRecentUse } = await server.ssrLoadModule('/src/lib/cardSorting.ts');
-const { computeMonthEarnings, getResolvedTransaction } = await server.ssrLoadModule('/src/lib/cashback.ts');
+const { computeMonthEarnings, computeYearEarnings, computeMissedRewards, getResolvedTransaction, getTransactionCashback, hasCashbackOverride } = await server.ssrLoadModule('/src/lib/cashback.ts');
 
 const card = (id, currentBalance = 0, extra = {}) => ({
   id, name: id, monarchId: `account-${id}`, currentBalance,
@@ -96,4 +96,96 @@ test('manual overrides and unknown categories stay consistent in rewards drill-d
   assert.equal(gas.transactions[0].merchantName, 'Edited merchant');
   assert.equal(earnings.byCategory.Other[0].transactions[0].id, 'unknown');
   assert.equal(earnings.totalSpend, 60);
+});
+
+test('custom cash back rates affect only their transaction', () => {
+  const cards = [card('one')];
+  const transactions = [
+    tx('custom', 'one', '2026-10-01', -100, { manualCashbackRate: 7 }),
+    tx('normal', 'one', '2026-10-02', -100),
+  ];
+  assert.equal(getTransactionCashback(transactions[0], cards[0]), 7);
+  assert.equal(getTransactionCashback(transactions[1], cards[0]), 4);
+  const earnings = computeMonthEarnings(cards, transactions, '2026-10');
+  assert.equal(earnings.totalCashback, 11);
+  assert.equal(earnings.byCard[0].categories[0].cashback, 11);
+  assert.equal(earnings.byCategory.Restaurants[0].cashback, 11);
+  assert.equal(cards[0].cashback.Restaurants, 4);
+});
+
+test('custom dollar amounts take precedence over card and transaction rates', () => {
+  const creditCard = card('one', -100, { historicalCashback: { '2026-10': { Restaurants: 10 } } });
+  const transaction = tx('custom', 'one', '2026-10-01', -100, { manualCashbackAmount: 8.25, manualCashbackRate: 5 });
+  assert.equal(getTransactionCashback(transaction, creditCard), 8.25);
+  assert.equal(computeMonthEarnings([creditCard], [transaction], '2026-10').totalCashback, 8.25);
+});
+
+test('zero dollar and zero percent overrides are respected', () => {
+  const creditCard = card('one');
+  for (const override of [{ manualCashbackAmount: 0 }, { manualCashbackRate: 0 }]) {
+    const transaction = tx('zero', 'one', '2026-10-01', -100, override);
+    assert.equal(hasCashbackOverride(transaction), true);
+    assert.equal(getTransactionCashback(transaction, creditCard), 0);
+    const earnings = computeMonthEarnings([creditCard], [transaction], '2026-10');
+    assert.equal(earnings.totalCashback, 0);
+    assert.equal(earnings.totalSpend, 100);
+    assert.equal(earnings.byCard[0].categories[0].transactions.length, 1);
+  }
+});
+
+test('clearing an override restores historical category rules and manual edits', () => {
+  const creditCard = card('one', -100, { historicalCashback: { '2026-10': { Gas: 6 } } });
+  const transaction = getResolvedTransaction(tx('edited', 'one', '2026-09-01', -100, {
+    manualDate: '2026-10-01', manualCategory: 'Gas', manualAmount: -50,
+    manualCashbackRate: undefined, manualCashbackAmount: undefined,
+  }));
+  assert.equal(hasCashbackOverride(transaction), false);
+  assert.equal(getTransactionCashback(transaction, creditCard), 3);
+});
+
+test('excluded transactions and transfers never earn manually overridden rewards', () => {
+  const creditCard = card('one');
+  for (const exclusion of [{ excludeFromCashback: true }, { isTransfer: true }, { originalCategory: 'Credit Card Payment' }]) {
+    const transaction = tx('excluded', 'one', '2026-10-01', -100, { manualCashbackAmount: 50, ...exclusion });
+    assert.equal(getTransactionCashback(transaction, creditCard), 0);
+    assert.equal(computeMonthEarnings([creditCard], [transaction], '2026-10').totalCashback, 0);
+  }
+});
+
+test('refunds and custom rewards reversals reconcile with monthly totals', () => {
+  const cards = [card('one')];
+  const transactions = [
+    tx('purchase', 'one', '2026-10-01', -100, { manualCashbackAmount: 8 }),
+    tx('refund', 'one', '2026-10-02', 25, { manualCashbackRate: 8 }),
+    tx('reversal', 'one', '2026-10-03', 5, { manualCashbackAmount: -0.5 }),
+  ];
+  assert.equal(getTransactionCashback(transactions[1], cards[0]), -2);
+  assert.equal(getTransactionCashback(transactions[2], cards[0]), -0.5);
+  const earnings = computeMonthEarnings(cards, transactions, '2026-10');
+  assert.equal(earnings.totalCashback, 5.5);
+  assert.equal(earnings.totalSpend, 70);
+  assert.equal(earnings.byCard[0].categories[0].transactions.reduce((sum, t) => sum + getTransactionCashback(t, cards[0]), 0), 5.5);
+});
+
+test('overrides remain visible when a refund brings net category spend to zero', () => {
+  const cards = [card('one')];
+  const transactions = [
+    tx('purchase', 'one', '2026-10-01', -100, { manualCashbackAmount: 10 }),
+    tx('refund', 'one', '2026-10-02', 100),
+  ];
+  const earnings = computeMonthEarnings(cards, transactions, '2026-10');
+  assert.equal(earnings.totalSpend, 0);
+  assert.equal(earnings.totalCashback, 6);
+  assert.equal(earnings.byCard[0].categories[0].transactions.length, 2);
+});
+
+test('overrides are reflected in yearly earnings and missed-rewards estimates', () => {
+  const cards = [card('one'), card('better', 0, { cashback: { Restaurants: 10 } })];
+  const transactions = [
+    tx('october', 'one', '2026-10-01', -100, { manualCashbackAmount: 7 }),
+    tx('september', 'one', '2026-09-01', -100),
+  ];
+  const earnings = computeMonthEarnings(cards, transactions, '2026-10');
+  assert.equal(computeMissedRewards(cards, earnings, '2026-10')[0].missed, 3);
+  assert.equal(computeYearEarnings(cards, transactions, 2026, 10).get('one'), 11);
 });

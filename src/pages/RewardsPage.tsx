@@ -1,12 +1,12 @@
 import { useId, useState } from 'react';
 import type { ReactNode } from 'react';
-import { AlertCircle, ChevronDown, PiggyBank, Sparkles } from 'lucide-react';
+import { AlertCircle, ChevronDown, Edit2, PiggyBank, Sparkles } from 'lucide-react';
 import { CATEGORIES } from '../core/models';
-import type { Transaction } from '../core/models';
+import type { CreditCard, Transaction } from '../core/models';
 import { useFinanceStore } from '../store/useFinanceStore';
 import { useUiStore } from '../store/useUiStore';
 import { useVisibleData } from '../hooks/useVisibleData';
-import { computeMonthEarnings, computeMissedRewards } from '../lib/cashback';
+import { computeMonthEarnings, computeMissedRewards, getTransactionCashback, hasCashbackOverride } from '../lib/cashback';
 import { formatCurrency, formatDate, formatMonth, formatRate, formatTxAmount } from '../lib/format';
 import { Segmented } from '../components/ui/Segmented';
 import { CardThumb } from '../components/ui/CardThumb';
@@ -136,10 +136,14 @@ export function RewardsPage() {
                     </div>
                   </div>
 
+                  <div style={{ marginBottom: '12px' }}>
+                    <RewardCardActions card={cardEarn.card} />
+                  </div>
                   <div className="list">
                     {cardEarn.categories.map(catEarn => (
                       <RewardBreakdown
                         key={`${viewingMonth}-${catEarn.category}`}
+                        card={cardEarn.card}
                         label={catEarn.category}
                         icon={<CategoryBadge category={catEarn.category} size={26} />}
                         rate={catEarn.rate}
@@ -189,6 +193,8 @@ export function RewardsPage() {
                   {entries.map(entry => (
                     <RewardBreakdown
                       key={`${viewingMonth}-${entry.card.id}`}
+                      card={entry.card}
+                      showCardActions
                       label={entry.card.name}
                       icon={<CardThumb card={entry.card} size="xs" />}
                       rate={entry.rate}
@@ -207,17 +213,44 @@ export function RewardsPage() {
   );
 }
 
-function RewardBreakdown({ label, icon, rate, spend, cashback, transactions }: {
+function RewardCardActions({ card }: { card: CreditCard }) {
+  const openDialog = useUiStore(s => s.openDialog);
+  return (
+    <div className="row wrap" style={{ gap: '8px' }}>
+      <button
+        type="button"
+        className="btn btn-sm btn-ghost"
+        aria-label={`Edit card ${card.name}`}
+        onClick={() => openDialog({ type: 'cardEditor', cardId: card.id })}
+      >
+        <Edit2 size={14} /> Edit Card
+      </button>
+      <button
+        type="button"
+        className="btn btn-sm btn-ghost"
+        aria-label={`Edit earn rates for ${card.name}`}
+        onClick={() => openDialog({ type: 'earnRates', cardId: card.id })}
+      >
+        Edit Earn Rates
+      </button>
+    </div>
+  );
+}
+
+function RewardBreakdown({ card, label, icon, rate, spend, cashback, transactions, showCardActions = false }: {
+  card: CreditCard;
   label: string;
   icon: ReactNode;
   rate: number;
   spend: number;
   cashback: number;
   transactions: Transaction[];
+  showCardActions?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
   const id = useId();
   const openDialog = useUiStore(s => s.openDialog);
+  const hasOverrides = transactions.some(hasCashbackOverride);
 
   return (
     <div className="reward-breakdown">
@@ -232,7 +265,9 @@ function RewardBreakdown({ label, icon, rate, spend, cashback, transactions }: {
           {icon}
           <span className="reward-breakdown-label">
             <span>{label}</span>
-            <span className="rate-pill">{formatRate(rate)}</span>
+            <span className="rate-pill" title={hasOverrides ? 'Includes transaction cash back overrides' : undefined}>
+              {hasOverrides ? 'Custom' : formatRate(rate)}
+            </span>
           </span>
         </span>
         <span className="list-row-end">
@@ -242,6 +277,7 @@ function RewardBreakdown({ label, icon, rate, spend, cashback, transactions }: {
         <ChevronDown size={16} className="disclosure-chevron" />
       </button>
       <div id={id} hidden={!expanded} className="reward-transactions">
+        {showCardActions && <RewardCardActions card={card} />}
         <div className="muted" style={{ fontSize: '12px', padding: '4px' }}>
           {transactions.length} {transactions.length === 1 ? 'transaction' : 'transactions'}
         </div>
@@ -259,7 +295,7 @@ function RewardBreakdown({ label, icon, rate, spend, cashback, transactions }: {
             <span className="list-row-end">
               <span className={`amount${tx.amount > 0 ? ' credit' : ''}`}>{formatTxAmount(tx.amount)}</span>
               <span className="muted" style={{ fontSize: '12px' }}>
-                {formatCurrency(-tx.amount * rate / 100)} cash back
+                {formatCurrency(getTransactionCashback(tx, card))} cash back{hasCashbackOverride(tx) ? ' • Custom' : ''}
               </span>
             </span>
           </button>

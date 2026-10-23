@@ -116,6 +116,8 @@ export interface Transaction {
   manualAmount?: number;
   manualMerchantName?: string;
   manualCategory?: FinanceCategory;
+  manualCashbackRate?: number; // Percentage for this transaction only
+  manualCashbackAmount?: number; // Dollar reward amount; negative for a reversal
 }
 
 export interface RecurringStream {

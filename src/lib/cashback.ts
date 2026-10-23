@@ -49,6 +49,23 @@ export function earnsRewards(tx: Transaction): boolean {
   return !tx.excludeFromCashback && !isTransferLike(tx);
 }
 
+export function hasCashbackOverride(tx: Transaction): boolean {
+  return Number.isFinite(tx.manualCashbackAmount) || Number.isFinite(tx.manualCashbackRate);
+}
+
+/** Rewards for a resolved transaction. Exclusions take precedence, then amount, rate, and card rules. */
+export function getTransactionCashback(tx: Transaction, card?: CreditCard): number {
+  if (!earnsRewards(tx)) return 0;
+  if (typeof tx.manualCashbackAmount === 'number' && Number.isFinite(tx.manualCashbackAmount)) {
+    return tx.manualCashbackAmount;
+  }
+  if (typeof tx.manualCashbackRate === 'number' && Number.isFinite(tx.manualCashbackRate)) {
+    return -tx.amount * tx.manualCashbackRate / 100;
+  }
+  const category = CATEGORIES.includes(tx.category) ? tx.category : 'Other';
+  return card ? -tx.amount * getCardCashback(card, tx.date.substring(0, 7), category) / 100 : 0;
+}
+
 export interface RankedCard {
   card: CreditCard;
   rate: number;
@@ -130,16 +147,17 @@ export function cardsByMonarchId(cards: CreditCard[]): Map<string, CreditCard> {
 /** Net spend per card and category for the month (refunds offset purchases; transfers excluded). */
 export function computeMonthEarnings(cards: CreditCard[], transactions: Transaction[], ym: string): MonthEarnings {
   const byMonarchId = cardsByMonarchId(cards);
-  const spend = new Map<string, Map<FinanceCategory, { spend: number; transactions: Transaction[] }>>();
+  const spend = new Map<string, Map<FinanceCategory, { spend: number; cashback: number; transactions: Transaction[] }>>();
 
   for (const tx of transactions) {
     if (!tx.date.startsWith(ym) || !earnsRewards(tx)) continue;
     const card = byMonarchId.get(tx.monarchAccountId);
     if (!card) continue;
     const category = CATEGORIES.includes(tx.category) ? tx.category : 'Other';
-    const perCat = spend.get(card.id) ?? new Map<FinanceCategory, { spend: number; transactions: Transaction[] }>();
-    const group = perCat.get(category) ?? { spend: 0, transactions: [] };
+    const perCat = spend.get(card.id) ?? new Map<FinanceCategory, { spend: number; cashback: number; transactions: Transaction[] }>();
+    const group = perCat.get(category) ?? { spend: 0, cashback: 0, transactions: [] };
     group.spend -= tx.amount;
+    group.cashback += getTransactionCashback(tx, card);
     group.transactions.push(tx);
     perCat.set(category, group);
     spend.set(card.id, perCat);
@@ -156,11 +174,11 @@ export function computeMonthEarnings(cards: CreditCard[], transactions: Transact
     const categories: CategoryEarnings[] = [];
     for (const category of CATEGORIES) {
       const group = perCat.get(category);
-      if (!group || group.spend <= 0) continue;
+      if (!group || (group.spend === 0 && group.cashback === 0)) continue;
       const s = group.spend;
       const categoryTransactions = group.transactions.sort((a, b) => b.date.localeCompare(a.date));
       const rate = getCardCashback(card, ym, category);
-      const cashback = s * (rate / 100);
+      const cashback = group.cashback;
       categories.push({ category, spend: s, cashback, rate, isBase: isBaseCashback(card, ym, category), transactions: categoryTransactions });
       byCategory[category].push({ card, spend: s, cashback, rate, transactions: categoryTransactions });
     }

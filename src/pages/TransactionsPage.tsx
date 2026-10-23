@@ -5,7 +5,7 @@ import { CATEGORIES } from '../core/models';
 import { useFinanceStore } from '../store/useFinanceStore';
 import { useUiStore } from '../store/useUiStore';
 import { useVisibleData } from '../hooks/useVisibleData';
-import { earnsRewards, getCardCashback } from '../lib/cashback';
+import { earnsRewards, getCardCashback, getTransactionCashback, hasCashbackOverride } from '../lib/cashback';
 import { formatCurrency, formatMonth, formatRate, formatTxAmount } from '../lib/format';
 import { CategoryBadge } from '../components/ui/CategoryIcon';
 import { CardThumb } from '../components/ui/CardThumb';
@@ -169,8 +169,9 @@ export function TransactionsPage() {
               const card = cardByMonarchId.get(tx.monarchAccountId);
               const txYm = tx.date.substring(0, 7);
               const isEligible = earnsRewards(tx);
-              const rate = card ? getCardCashback(card, txYm, tx.category) : 0;
-              const earnedCashback = isEligible && tx.amount < 0 ? (-tx.amount * rate) / 100 : 0;
+              const rate = tx.manualCashbackRate ?? (card ? getCardCashback(card, txYm, tx.category) : 0);
+              const earnedCashback = getTransactionCashback(tx, card);
+              const isCustom = hasCashbackOverride(tx);
 
               return (
                 <button
@@ -205,9 +206,9 @@ export function TransactionsPage() {
 
                   <div className="list-row-end">
                     <div className="amount tabular">{formatTxAmount(tx.amount)}</div>
-                    {isEligible && earnedCashback > 0 ? (
-                      <div className="text-good" style={{ fontSize: '12px', fontWeight: 600 }}>
-                        +{formatCurrency(earnedCashback)} ({formatRate(rate)})
+                    {isEligible && (earnedCashback !== 0 || isCustom) ? (
+                      <div className={earnedCashback < 0 ? 'text-warn' : 'text-good'} style={{ fontSize: '12px', fontWeight: 600 }}>
+                        {earnedCashback > 0 ? '+' : ''}{formatCurrency(earnedCashback)} ({isCustom ? 'Custom' : formatRate(rate)})
                       </div>
                     ) : (
                       <div className="subtle" style={{ fontSize: '11px' }}>
