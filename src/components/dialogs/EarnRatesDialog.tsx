@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { CATEGORIES } from '../../core/models';
 import type { FinanceCategory } from '../../core/models';
-import { getCardCashback } from '../../lib/cashback';
+import { buildEarnRatesUpdate, getEarnRateInputs } from '../../lib/earnRates';
 import { useFinanceStore } from '../../store/useFinanceStore';
 import { useUiStore } from '../../store/useUiStore';
 import { Modal } from '../ui/Modal';
@@ -21,60 +21,27 @@ export function EarnRatesDialog({ cardId }: EarnRatesDialogProps) {
   const card = cards.find(c => c.id === cardId);
 
   const [rates, setRates] = useState<Record<FinanceCategory, string>>(() => {
-    const initial: Record<string, string> = {};
-    if (card) {
-      CATEGORIES.forEach(cat => {
-        initial[cat] = getCardCashback(card, viewingMonth, cat).toString();
-      });
-    }
-    return initial as Record<FinanceCategory, string>;
+    return card ? getEarnRateInputs(card, viewingMonth) : Object.fromEntries(CATEGORIES.map(cat => [cat, ''])) as Record<FinanceCategory, string>;
   });
 
   const [notes, setNotes] = useState(() => card?.notes || '');
   const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState('');
 
   if (!card) return null;
 
   const handleSave = async (mode: 'current_and_future' | 'this_month') => {
     setIsSaving(true);
+    setError('');
     try {
-      const cashbackMap: Record<string, number> = {};
-      CATEGORIES.forEach(cat => {
-        const parsed = parseFloat(rates[cat]);
-        cashbackMap[cat] = isNaN(parsed) ? 1 : parsed;
-      });
-
-      const cardData: Record<string, unknown> = {
-        notes: notes.trim(),
-      };
-
-      if (mode === 'current_and_future') {
-        cardData.cashback = cashbackMap;
-        const newHistorical = { ...(card.historicalCashback || {}) };
-        const months = Object.keys(newHistorical);
-        months.forEach(ym => {
-          if (ym >= viewingMonth) {
-            delete newHistorical[ym];
-          }
-        });
-        cardData.historicalCashback = newHistorical;
-      } else {
-        const newHistorical = { ...(card.historicalCashback || {}) };
-        const monthOverrides: Record<string, number> = {};
-        CATEGORIES.forEach(cat => {
-          const parsed = parseFloat(rates[cat]);
-          monthOverrides[cat] = isNaN(parsed) ? 1 : parsed;
-        });
-        newHistorical[viewingMonth] = monthOverrides;
-        cardData.historicalCashback = newHistorical;
-      }
+      const cardData = { ...buildEarnRatesUpdate(card, viewingMonth, rates, mode), notes: notes.trim() };
 
       await updateCreditCard(card.id, cardData);
       pushToast({ tone: 'success', message: `Saved earn rates for ${card.name}` });
       closeDialog();
     } catch (e) {
       console.error(e);
-      pushToast({ tone: 'error', message: 'Failed to save earn rates' });
+      setError(e instanceof Error ? e.message : 'Failed to save earn rates');
     } finally {
       setIsSaving(false);
     }
@@ -122,7 +89,9 @@ export function EarnRatesDialog({ cardId }: EarnRatesDialogProps) {
       <div className="stack">
         <div style={{ fontSize: '13px', color: 'var(--text-2)', marginBottom: '4px' }}>
           Base earn rate: <strong>{card.baseCashback ?? 1}%</strong>. Customize bonus reward rates for each category below:
+          <div>Leave a category blank to use the base rate.</div>
         </div>
+        {error && <div role="alert" className="form-error">{error}</div>}
 
         <div className="list">
           {CATEGORIES.map(cat => (
@@ -138,7 +107,9 @@ export function EarnRatesDialog({ cardId }: EarnRatesDialogProps) {
                   step="0.01"
                   min="0"
                   max="100"
-                  value={rates[cat] ?? '1'}
+                  aria-label={`${cat} earn rate`}
+                  placeholder={`Base: ${card.baseCashback ?? 0}`}
+                  value={rates[cat] ?? ''}
                   onChange={e => setRates({ ...rates, [cat]: e.target.value })}
                   className="input input-sm tabular"
                   style={{ width: '70px', textAlign: 'center', fontWeight: 700 }}

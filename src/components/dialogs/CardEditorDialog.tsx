@@ -6,6 +6,8 @@ import { useUiStore } from '../../store/useUiStore';
 import { Modal } from '../ui/Modal';
 import { Switch } from '../ui/Switch';
 import { CardThumb } from '../ui/CardThumb';
+import { CardImagePicker } from '../ui/CardImagePicker';
+import { uploadCardImage } from '../../lib/cardImages';
 
 interface CardEditorDialogProps {
   cardId?: string;
@@ -26,6 +28,7 @@ export function CardEditorDialog({ cardId, addOffer }: CardEditorDialogProps) {
   const [name, setName] = useState(() => card?.name || '');
   const [bankName, setBankName] = useState(() => card?.bankName || card?.institutionName || '');
   const [imageUrl, setImageUrl] = useState(() => card?.imageUrl || '');
+  const [pendingImage, setPendingImage] = useState<Blob | undefined>();
   const [cardLimit, setCardLimit] = useState(() => card?.cardLimit !== undefined ? card.cardLimit.toString() : '');
   const [lastFourDigits, setLastFourDigits] = useState(() => card?.lastFourDigits || '');
   const [dueDate, setDueDate] = useState(() => card?.dueDate !== undefined ? card.dueDate.toString() : '');
@@ -85,10 +88,11 @@ export function CardEditorDialog({ cardId, addOffer }: CardEditorDialogProps) {
 
     setIsSaving(true);
     try {
+      const savedImageUrl = pendingImage ? await uploadCardImage(pendingImage) : imageUrl.trim() || undefined;
       const cardData: Record<string, unknown> = {
         name: name.trim(),
         bankName: bankName.trim() || undefined,
-        imageUrl: imageUrl.trim() || undefined,
+        imageUrl: savedImageUrl,
         cardLimit: cardLimit !== '' ? parseFloat(cardLimit) : undefined,
         lastFourDigits: lastFourDigits.trim() || undefined,
         dueDate: dueDate !== '' ? parseInt(dueDate, 10) : undefined,
@@ -172,7 +176,7 @@ export function CardEditorDialog({ cardId, addOffer }: CardEditorDialogProps) {
             Cancel
           </button>
           <button type="button" className="btn btn-primary" onClick={handleSave} disabled={isSaving || isDeleting}>
-            Save
+            {isSaving && pendingImage ? 'Uploading Image…' : isSaving ? 'Saving…' : 'Save'}
           </button>
         </>
       }
@@ -280,16 +284,11 @@ export function CardEditorDialog({ cardId, addOffer }: CardEditorDialogProps) {
               />
             </div>
 
-            <div className="field">
-              <label className="field-label">Custom Image URL</label>
-              <input
-                type="url"
-                className="input"
-                placeholder="https://..."
-                value={imageUrl}
-                onChange={e => setImageUrl(e.target.value)}
-              />
-            </div>
+            <CardImagePicker
+              value={imageUrl}
+              onChange={(url, image) => { setImageUrl(url); setPendingImage(image); }}
+              disabled={isSaving || isDeleting}
+            />
           </div>
         </div>
 

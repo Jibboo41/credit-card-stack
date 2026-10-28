@@ -115,7 +115,8 @@ export function CardsPage() {
             const limit = getCreditLimit(card);
             const util = getUtilization(card);
             const apr = normalizeApr(card.apr);
-            const activeCategories = getActiveCategoriesForMonth(card, viewingMonth);
+            const activeCategories = getActiveCategoriesForMonth(card, viewingMonth)
+              .filter(category => getCardCashback(card, viewingMonth, category) > 0);
 
             return (
               <div key={card.id} className="panel credit-card-tile">

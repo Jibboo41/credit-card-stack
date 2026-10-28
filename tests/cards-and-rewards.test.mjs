@@ -11,6 +11,8 @@ const server = await createServer({
 after(() => server.close());
 const { sortCardsByBalanceAndRecentUse } = await server.ssrLoadModule('/src/lib/cardSorting.ts');
 const { computeMonthEarnings, computeYearEarnings, computeMissedRewards, getResolvedTransaction, getTransactionCashback, hasCashbackOverride } = await server.ssrLoadModule('/src/lib/cashback.ts');
+const { getEarnRateInputs, buildEarnRatesUpdate } = await server.ssrLoadModule('/src/lib/earnRates.ts');
+const { getCardCashback, getActiveCategoriesForMonth } = await server.ssrLoadModule('/src/lib/cashback.ts');
 
 const card = (id, currentBalance = 0, extra = {}) => ({
   id, name: id, monarchId: `account-${id}`, currentBalance,
@@ -188,4 +190,75 @@ test('overrides are reflected in yearly earnings and missed-rewards estimates', 
   const earnings = computeMonthEarnings(cards, transactions, '2026-10');
   assert.equal(computeMissedRewards(cards, earnings, '2026-10')[0].missed, 3);
   assert.equal(computeYearEarnings(cards, transactions, 2026, 10).get('one'), 11);
+});
+
+test('earn rate editor leaves unconfigured categories blank instead of promoting the base rate', () => {
+  const creditCard = card('one', 0, { baseCashback: 1.5, cashback: { Restaurants: 3 } });
+  const inputs = getEarnRateInputs(creditCard, '2026-10');
+  assert.equal(inputs.Restaurants, '3');
+  assert.equal(inputs.Groceries, '');
+  const updated = { ...creditCard, ...buildEarnRatesUpdate(creditCard, '2026-10', inputs, 'current_and_future') };
+  assert.deepEqual(updated.cashback, { Restaurants: 3 });
+  assert.deepEqual(getActiveCategoriesForMonth(updated, '2026-10'), ['Restaurants']);
+  assert.equal(getCardCashback(updated, '2026-10', 'Groceries'), 1.5);
+});
+
+test('clearing a default category removes its bonus and restores the card base rate', () => {
+  const creditCard = card('one', 0, { baseCashback: 2 });
+  const inputs = { ...getEarnRateInputs(creditCard, '2026-10'), Restaurants: '', Gas: '5' };
+  const updated = { ...creditCard, ...buildEarnRatesUpdate(creditCard, '2026-10', inputs, 'current_and_future') };
+  assert.deepEqual(updated.cashback, { Gas: 5 });
+  assert.equal(getCardCashback(updated, '2026-10', 'Restaurants'), 2);
+  assert.deepEqual(getActiveCategoriesForMonth(updated, '2026-10'), ['Gas']);
+  assert.deepEqual(creditCard.cashback, { Restaurants: 4 });
+});
+
+test('blank monthly rates disable a default bonus for that month without affecting other months', () => {
+  const creditCard = card('one', 0, { baseCashback: 1.5, historicalCashback: { '2026-09': { Gas: 5 } } });
+  const inputs = { ...getEarnRateInputs(creditCard, '2026-10'), Restaurants: '', Groceries: '3' };
+  const updated = { ...creditCard, ...buildEarnRatesUpdate(creditCard, '2026-10', inputs, 'this_month') };
+  assert.equal(getCardCashback(updated, '2026-10', 'Restaurants'), 1.5);
+  assert.equal(getCardCashback(updated, '2026-11', 'Restaurants'), 4);
+  assert.equal(getCardCashback(updated, '2026-09', 'Gas'), 5);
+  assert.deepEqual(getActiveCategoriesForMonth(updated, '2026-10'), ['Groceries']);
+  assert.equal(getEarnRateInputs(updated, '2026-10').Restaurants, '');
+  assert.deepEqual(creditCard.historicalCashback, { '2026-09': { Gas: 5 } });
+});
+
+test('clearing every rate uses the base rate without saving phantom category rates', () => {
+  const creditCard = card('one', 0, { cashback: {}, baseCashback: 2 });
+  const inputs = getEarnRateInputs(creditCard, '2026-10');
+  for (const mode of ['current_and_future', 'this_month']) {
+    const updated = { ...creditCard, ...buildEarnRatesUpdate(creditCard, '2026-10', inputs, mode) };
+    assert.deepEqual(getActiveCategoriesForMonth(updated, '2026-10'), []);
+    assert.equal(getCardCashback(updated, '2026-10', 'Groceries'), 2);
+    assert.equal(computeMonthEarnings([updated], [tx('purchase', 'one', '2026-10-01')], '2026-10').totalCashback, 2);
+  }
+});
+
+test('explicit zero rates remain distinct from blank inputs', () => {
+  const creditCard = card('one');
+  const inputs = { ...getEarnRateInputs(creditCard, '2026-10'), Restaurants: '0' };
+  for (const mode of ['current_and_future', 'this_month']) {
+    const updated = { ...creditCard, ...buildEarnRatesUpdate(creditCard, '2026-10', inputs, mode) };
+    assert.equal(getCardCashback(updated, '2026-10', 'Restaurants'), 0);
+    assert.equal(getCardCashback(updated, '2026-10', 'Groceries'), 1);
+    assert.equal(getEarnRateInputs(updated, '2026-10').Restaurants, '0');
+  }
+});
+
+test('earn rate saves reject malformed, non-finite, and out-of-range values', () => {
+  const creditCard = card('one');
+  for (const value of ['3abc', 'Infinity', '-1', '101']) {
+    const inputs = { ...getEarnRateInputs(creditCard, '2026-10'), Gas: value };
+    assert.throws(() => buildEarnRatesUpdate(creditCard, '2026-10', inputs, 'current_and_future'), /Gas/);
+  }
+});
+
+test('saving defaults retains past month overrides and clears current and future overrides', () => {
+  const creditCard = card('one', 0, { historicalCashback: { '2026-09': { Gas: 5 }, '2026-10': { Gas: 4 }, '2026-11': { Gas: 3 } } });
+  const inputs = { ...getEarnRateInputs(creditCard, '2026-10'), Gas: '6' };
+  const update = buildEarnRatesUpdate(creditCard, '2026-10', inputs, 'current_and_future');
+  assert.deepEqual(update.historicalCashback, { '2026-09': { Gas: 5 } });
+  assert.equal(creditCard.historicalCashback['2026-11'].Gas, 3);
 });
